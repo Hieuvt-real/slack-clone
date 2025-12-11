@@ -9,18 +9,37 @@ const syncUser = inngest.createFunction(
   { id: "sync-user" },
   { event: "clerk/user.created" },
   async ({ event }) => {
-    await connectDB();
+    try {
+      await connectDB();
+      console.log("[INGEST] DB connection successful within function.");
+    } catch (err) {
+      console.error(
+        "[INGEST CRASH] Failed to connect DB inside function:",
+        err
+      );
+
+      throw err;
+    }
 
     const { id, email_addresses, first_name, last_name, image_url } =
       event.data;
 
     const newUser = {
       clerkId: id,
-      email: email_addresses[0]?.email_address,
+      email:
+        email_addresses && email_addresses[0]
+          ? email_addresses[0].email_address
+          : undefined,
       name: `${first_name || ""} ${last_name || ""}`,
       image: image_url,
     };
-    await User.create(newUser);
+
+    try {
+      await User.create(newUser);
+      console.log("User added to DB successfully.");
+    } catch (dbError) {
+      console.error("MongoDB User.create failed:", dbError);
+    }
 
     await upsertStreamUser({
       id: newUser.clerkId.toString(),
@@ -43,4 +62,4 @@ const deleteUserFromDB = inngest.createFunction(
   }
 );
 
-export const functions = [syncUser];
+export const functions = [syncUser, deleteUserFromDB];
